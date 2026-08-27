@@ -1,0 +1,96 @@
+/**
+ * Design tokens.
+ *
+ * Light is the primary palette — a food guide reads better on warm paper than
+ * on black — with a dark variant that follows the OS setting. Every colour in
+ * the app comes from here; no component hardcodes a hex value.
+ */
+:root {
+  /* Warm neutrals: paper, not grey. */
+  --bg: #faf7f2;
+  --surface: #ffffff;
+  --surface-sunken: #f2ede5;
+  --border: #e7e0d5;
+  --border-strong: #d8cfc0;
+
+  --text: #1a1614;
+  --text-secondary: #6b625b;
+  --text-muted: #9a918a;
+
+  /* Griddle orange. Used sparingly: score, primary action, active tab. */
+  --accent: #e0600d;
+  --accent-hover: #c85409;
+  --accent-soft: #fdf0e4;
+  --accent-border: #f5cfae;
+  --on-accent: #ffffff;
+
+  --danger: #c8342b;
+  --danger-soft: #fdeceb;
+
+  /* Leaderboard medals — the one deliberately playful flourish. */
+  --gold: #c9971f;
+  --gold-soft: #fbf3dc;
+  --silver: #8b8b93;
+  --silver-soft: #f1f1f3;
+  --bronze: #a86a3d;
+  --bronze-soft: #f8ecE2;
+
+  --radius-sm: 8px;
+  --radius: 14px;
+  --radius-lg: 20px;
+  --radius-full: 999px;
+
+  --shadow-card: 0 1px 2px rgba(26, 22, 20, 0.04), 0 4px 12px rgba(26, 22, 20, 0.05);
+  --shadow-raised: 0 2px 6px rgba(26, 22, 20, 0.08), 0 12px 28px rgba(26, 22, 20, 0.1);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Minimum comfortable thumb target. Nothing tappable goes below this. */
+  --tap: 44px;
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Text", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  --nav-height: 60px;
+  --page-max: 640px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141210;
+    --surface: #1e1b18;
+    --surface-sunken: #262220;
+    --border: #322d29;
+    --border-strong: #443d37;
+
+    --text: #f5f1ec;
+    --text-secondary: #a9a09a;
+    --text-muted: #7c736d;
+
+    --accent: #ff8a3d;
+    --accent-hover: #ff9d5c;
+    --accent-soft: #2e2019;
+    --accent-border: #4a3325;
+    --on-accent: #1a1005;
+
+    --danger: #f0736a;
+    --danger-soft: #33201e;
+
+    --gold: #e0b64a;
+    --gold-soft: #2c2416;
+    --silver: #b4b4bd;
+    --silver-soft: #24242a;
+    --bronze: #cd8a55;
+    --bronze-soft: #2a1f16;
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.25);
+    --shadow-raised: 0 2px 6px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(0, 0, 0, 0.4);
+  }
+}

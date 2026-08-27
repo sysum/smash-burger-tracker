@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-ssr
+dev-dist
+*.local
+.DS_Store
+.vite
+coverage
+.env
+.env.*
+!.env.example
+
+# Capacitor native shells (generated; add when we wrap the app)
+/ios
+/android

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Smash Burger Tracker">
+  <rect width="100" height="100" rx="22" fill="#E0600D"/>
+  <path d="M18.5 51.7a31.5 23.5 0 0 1 63 0z" fill="#FFF7EC"/>
+  <rect x="18.5" y="46" width="63" height="5.7" fill="#FFF7EC"/>
+  <rect x="16.5" y="53.3" width="67" height="9.2" rx="3" fill="#5B2E1A"/>
+  <rect x="20" y="64.2" width="60" height="11.8" rx="5.5" fill="#FFF7EC"/>
+</svg>
