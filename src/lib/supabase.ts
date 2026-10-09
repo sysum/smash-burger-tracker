@@ -16,15 +16,31 @@ import type { Database } from "@/lib/database.types";
  * which bypasses RLS and must never appear in a `VITE_` variable — it would
  * ship to every visitor as full write access.
  *
- * Missing configuration is a supported state, not an error. `npm run dev` with
- * no `.env.local` still runs the app against IndexedDB, which keeps the test
- * suite, the offline story, and the Capacitor build working without a network
- * round trip to a project that may not exist yet.
+ * Missing configuration is supported, but only when it is *asked for*. Running
+ * on IndexedDB is right for `npm run dev` with no `.env.local` and for the
+ * browser tests, and it keeps the Capacitor path open.
+ *
+ * It is wrong for a deployed build, and silently falling back there is how this
+ * app spent a day live on the internet with no sign-in, no shared data, and
+ * every visitor quietly writing burgers into their own browser. Nothing was
+ * broken enough to notice: the app looked like it worked. So a production build
+ * with no configuration and no explicit `VITE_LOCAL_ONLY=true` is now a hard
+ * error rather than a quiet downgrade.
  */
 const url = import.meta.env.VITE_SUPABASE_URL?.trim();
 const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
 
 export const isSupabaseConfigured = Boolean(url && publishableKey);
+
+/** Local-only was deliberately asked for (the browser tests, offline dev). */
+export const isLocalOnlyIntentional = import.meta.env.VITE_LOCAL_ONLY === "true";
+
+/**
+ * A deployed build that was never given a backend. The app must refuse to
+ * render rather than pose as a working local notebook.
+ */
+export const isMisconfigured =
+  !isSupabaseConfigured && !isLocalOnlyIntentional && import.meta.env.PROD;
 
 export const supabase: SupabaseClient<Database> | null = isSupabaseConfigured
   ? createClient<Database>(url!, publishableKey!, {
