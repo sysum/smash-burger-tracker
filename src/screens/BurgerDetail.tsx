@@ -4,6 +4,7 @@ import { CategoryBars } from "@/components/CategoryBars";
 import { BurgerPhoto } from "@/components/BurgerPhoto";
 import { EmptyState } from "@/components/EmptyState";
 import { useAppStore } from "@/store/AppStore";
+import { useAuth } from "@/store/AuthStore";
 import { formatDate, formatHundred, formatPrice, initials, pluralize } from "@/lib/format";
 import {
   CATEGORIES,
@@ -16,6 +17,7 @@ export function BurgerDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { getScoredVisit, getReviewer, deleteVisit, ready } = useAppStore();
+  const { canWrite } = useAuth();
 
   const entry = id ? getScoredVisit(id) : null;
 
@@ -54,13 +56,15 @@ export function BurgerDetail() {
         <button className="topbar__back" onClick={() => navigate("/")}>
           ‹ Leaderboard
         </button>
-        <button
-          className="btn btn--ghost btn--sm"
-          style={{ color: "var(--danger)" }}
-          onClick={handleDelete}
-        >
-          Delete
-        </button>
+        {canWrite && (
+          <button
+            className="btn btn--ghost btn--sm"
+            style={{ color: "var(--danger)" }}
+            onClick={handleDelete}
+          >
+            Delete
+          </button>
+        )}
       </div>
 
       <div className="stack--loose stack">

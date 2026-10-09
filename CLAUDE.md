@@ -1,7 +1,8 @@
 # Smash Burger Tracker — Claude Context
 
-A mobile-first PWA for logging, scoring, and ranking smash burgers. Personal
-app, used on a phone in restaurants. No accounts, no backend, no network.
+A mobile-first PWA for logging, scoring, and ranking smash burgers. Used on a
+phone in restaurants. **Public read, private write:** anyone with the URL sees
+the leaderboard; only signed-in crew can add or change anything.
 
 **Read `README.md` too** — it covers the same ground for humans, with setup and
 deployment. This file is the short version plus the things that are easy to
@@ -15,7 +16,9 @@ break.
 | :---- | :----- |
 | Framework | React 19 + TypeScript, Vite 7 |
 | Routing | react-router-dom 7, **HashRouter** |
-| Storage | IndexedDB via `idb-keyval` |
+| Backend | Supabase (Postgres + Auth + Storage) — optional; absent = local only |
+| Storage | Supabase when configured, else IndexedDB via `idb-keyval` |
+| Auth | Supabase email OTP (six-digit code, **not** magic link) |
 | PWA | `vite-plugin-pwa` (autoUpdate service worker) |
 | Styling | Plain CSS with custom properties — no Tailwind, no CSS-in-JS |
 | Tests | Vitest (unit) + Playwright scripts (`e2e/`, not in `npm test`) |
@@ -28,11 +31,15 @@ nothing to fetch and the app is small enough that React state is sufficient.
 ```bash
 npm run dev          # Vite dev server, http://localhost:5173
 npm run dev -- --host  # expose on LAN for phone testing
-npm test             # Vitest, ~50 tests, sub-second
+npm test             # Vitest, ~60 tests, sub-second
 npm run typecheck    # tsc --noEmit
 npm run lint         # ESLint
-npm run build        # typecheck + production build to dist/
-npm run test:e2e     # needs: npm i --no-save playwright && npx playwright install chromium
+npm run gen:types    # regenerate src/lib/database.types.ts from the remote schema
+npm run build        # typecheck + production build to dist/ (uses .env.local)
+npm run build:e2e    # same, but forced to local storage (--mode e2e)
+npm run test:e2e     # builds local-mode first, then drives a real browser
+                     # needs: npm i --no-save playwright && npx playwright install chromium
+                     # serve with: npm run preview -- --host 127.0.0.1
 ```
 
 Before committing: `npm test && npm run typecheck && npm run lint`.
@@ -47,14 +54,22 @@ src/
 ├── lib/
 │   ├── scoring.ts           Weights + all score maths (PURE — no React/DOM)
 │   ├── leaderboard.ts       Scoring visits + ranking rules (PURE)
-│   ├── repository.ts        The single persistence boundary
+│   ├── repository.ts        The single persistence boundary + backend choice
+│   ├── supabaseRepository.ts Postgres/Storage implementation of Repository
+│   ├── supabase.ts          Client singleton; null when unconfigured
+│   ├── database.types.ts    GENERATED from the remote schema — do not hand-edit
+│   ├── mutations.ts         Every change to the dataset, as pure transforms
 │   ├── photos.ts            Downscale + re-encode before storing
 │   ├── format.ts            Date, price, number formatting
 │   └── id.ts                Id generation
-├── store/AppStore.tsx       React state over the repository
-├── components/              Presentational pieces
-├── screens/                 Leaderboard, BurgerDetail, AddBurger, Reviewers
+├── store/
+│   ├── AppStore.tsx         React state over the repository
+│   └── AuthStore.tsx        Who is signed in; `canWrite`
+├── components/              Presentational pieces + RequireWriteAccess
+├── screens/                 Leaderboard, BurgerDetail, AddBurger, Reviewers, SignIn
 └── styles/                  tokens.css (all colours) + global.css
+
+supabase/migrations/         Schema, RLS, grants, add_visit RPC
 ```
 
 ---
@@ -137,6 +152,74 @@ screen, component, or store action may touch IndexedDB or `localStorage`
 directly. Adding cross-device sync means writing a new implementation of that
 interface and changing one line — not touching screens.
 
+**`Repository` has one method per user-visible change**, not a single
+`save(wholeDataset)`. Both work against local storage; only this shape works
+against a network backend, where a whole-dataset write means rewriting every
+row on every edit and lets two devices silently overwrite each other. Adding a
+new kind of change means adding a method here and a pure transform in
+`lib/mutations.ts` — not widening `save`.
+
+**`lib/mutations.ts` is the shared definition of what each change means.** The
+store applies a transform to React state; the repository applies the same one
+to storage. A rule implemented in only one of them — "deleting a reviewer also
+deletes their scorecards" — would hold in memory and quietly not hold on disk,
+and you would only see it after a reload. Tested in `mutations.test.ts`.
+
+**Writes are awaited, and their failure reaches the caller.** Store actions
+persist first and update React state second, so the two can never disagree and
+a screen can tell the user their burger did not save. Do not go back to
+updating state and letting an effect write in the background: the write then
+fails after the screen has navigated away, leaving a console error behind a
+burger that looks saved and isn't.
+
+**Clear an input before awaiting a write, never after.** Anything the user
+types while the write is in flight is otherwise wiped when the handler
+resumes — milliseconds against IndexedDB, but plainly visible over a network.
+`handleQuickAdd` in `AddBurger.tsx` and `handleAdd` in `Reviewers.tsx` both do
+this; `e2e/flow.mjs` catches it if they stop.
+
+**`database.types.ts` is generated, never hand-edited.** Run `npm run gen:types`
+after any migration. The Supabase client is typed against it, so a renamed
+column breaks the build at the call site instead of returning undefined at
+runtime. The three row interfaces this replaced were hand-maintained and had
+exactly the drift problem a stored score would have.
+
+Migrations are applied with `supabase db push`, not by pasting into the
+dashboard SQL editor — the remote `schema_migrations` table is then an accurate
+record of what ran, so `supabase migration list` can be trusted. If something
+is ever applied by hand, reconcile it with
+`supabase migration repair --status applied <version>` and verify the schema
+first; marking an unverified migration as applied bakes the divergence in
+permanently.
+
+**Row level security is the only thing protecting the data.** The anon key is
+inlined into the JavaScript bundle by Vite and is public by design; it grants
+nothing on its own. Every table must have RLS enabled and a policy, and every
+table also needs an explicit GRANT — the project is configured with
+"automatically expose new tables" off, so the two are independent gates and
+both must pass. A `service_role` key must never appear in a `VITE_` variable:
+it bypasses RLS and would ship to every visitor as full write access.
+
+**`canWrite` in `AuthStore` hides UI, it does not authorise.** The database
+refuses an anonymous write whether or not a button renders. Never move an
+authorisation decision into React — a gate you can read in devtools is not one.
+
+**Sign-in is a six-digit emailed code, not a magic link.** A link needs a
+redirect target, which from Capacitor's `capacitor://localhost` origin means a
+custom URL scheme and a deep-link listener. A code has no redirect and works
+identically on web and native. This depends on the dashboard's Magic Link email
+template using `{{ .Token }}` rather than `{{ .ConfirmationURL }}` — change that
+back and OTP sign-in silently becomes a link again.
+
+**Sign-ups are disabled in the dashboard**, so having an account *is* the
+allowlist that the RLS policies rely on. Turning sign-ups on would let anyone
+who can read the leaderboard grant themselves write access.
+
+**The browser tests run against local storage, never the real project**
+(`--mode e2e` blanks the Supabase variables). They exist to prove the app's own
+logic; pointed at Supabase they would test the network and fail every write,
+because they run as an anonymous visitor who by design cannot write.
+
 **`lib/scoring.ts` and `lib/leaderboard.ts` stay pure.** No React imports, no
 DOM access. That is what makes them exhaustively testable.
 
@@ -173,6 +256,12 @@ that; changing any of them breaks the native path:
 
 ## Deliberately out of scope
 
-No auth, no sync, no social features, no restaurant APIs, no maps, no AI, no
-achievements or badges. Data is local to the device. Keep the architecture
-extensible for these; don't build them unasked.
+No social features, no restaurant APIs, no maps, no AI, no achievements or
+badges. Keep the architecture extensible for these; don't build them unasked.
+
+Still to come, in order: a one-time upload of data already sitting in a phone's
+IndexedDB (Phase 3), then offline write-through with soft deletes so a burger
+can be logged with no signal (Phase 4), then the Capacitor wrap (Phase 5).
+Until Phase 4 lands, a write with no connection fails — which is a real
+regression against the local-only version, and the reason Phase 4 is not
+optional.

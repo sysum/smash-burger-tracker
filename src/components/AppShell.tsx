@@ -1,4 +1,5 @@
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "@/store/AuthStore";
 
 /**
  * Persistent bottom navigation, with the add-burger action as a centre FAB —
@@ -7,10 +8,15 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
  *
  * Hidden on the add flow, which owns the full screen and has its own sticky
  * action bar; a nav bar there would compete with it and add a second way out.
+ *
+ * A signed-out visitor gets a read-only shell: the add button and the reviewer
+ * editor are replaced by a way in. Both routes are guarded anyway, so this is
+ * about not offering an action that ends in a redirect.
  */
 export function AppShell() {
   const { pathname } = useLocation();
-  const hideNav = pathname.startsWith("/add");
+  const { canWrite } = useAuth();
+  const hideNav = pathname.startsWith("/add") || pathname.startsWith("/signin");
 
   return (
     <div className="app-shell">
@@ -26,16 +32,27 @@ export function AppShell() {
               Leaderboard
             </NavLink>
 
-            <Link to="/add" className="nav__fab" aria-label="Add a burger">
-              +
-            </Link>
+            {canWrite && (
+              <Link to="/add" className="nav__fab" aria-label="Add a burger">
+                +
+              </Link>
+            )}
 
-            <NavLink to="/reviewers" className="nav__link">
-              <span className="nav__icon" aria-hidden="true">
-                👥
-              </span>
-              Reviewers
-            </NavLink>
+            {canWrite ? (
+              <NavLink to="/reviewers" className="nav__link">
+                <span className="nav__icon" aria-hidden="true">
+                  👥
+                </span>
+                Reviewers
+              </NavLink>
+            ) : (
+              <NavLink to="/signin" className="nav__link">
+                <span className="nav__icon" aria-hidden="true">
+                  🔑
+                </span>
+                Sign in
+              </NavLink>
+            )}
           </div>
         </nav>
       )}

@@ -4,11 +4,11 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { EMPTY_DATA, repository } from "@/lib/repository";
+import * as mutations from "@/lib/mutations";
 import { newId } from "@/lib/id";
 import { scoreVisits, sortScoredVisits, type ScoredVisit, type SortKey } from "@/lib/leaderboard";
 import type { CategoryScores } from "@/lib/scoring";
@@ -30,9 +30,9 @@ interface AppStoreValue {
   getScoredVisit: (visitId: string) => ScoredVisit | null;
   getReviewer: (reviewerId: string) => Reviewer | null;
 
-  addReviewer: (name: string) => Reviewer;
-  renameReviewer: (id: string, name: string) => void;
-  deleteReviewer: (id: string) => void;
+  addReviewer: (name: string) => Promise<Reviewer>;
+  renameReviewer: (id: string, name: string) => Promise<void>;
+  deleteReviewer: (id: string) => Promise<void>;
 
   /** Create a burger and its reviewers' scorecards in one atomic write. */
   addVisit: (
@@ -48,16 +48,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(EMPTY_DATA);
   const [ready, setReady] = useState(false);
 
-  // Guards the persist effect below so the initial hydration doesn't
-  // immediately write the empty dataset back over real stored data.
-  const hydrated = useRef(false);
-
   useEffect(() => {
     let cancelled = false;
     repository.load().then((loaded) => {
       if (cancelled) return;
       setData(loaded);
-      hydrated.current = true;
       setReady(true);
     });
     return () => {
@@ -65,12 +60,28 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!hydrated.current) return;
-    repository.save(data).catch((error) => {
-      console.error("Failed to persist data", error);
-    });
-  }, [data]);
+  /**
+   * Persist one change, then reflect it in memory.
+   *
+   * The write is awaited and its failure propagates to the caller, so a screen
+   * can tell the user their burger did not save. The previous shape — update
+   * state, let an effect write in the background — could not: by the time the
+   * write failed the screen had already navigated away, and the only trace was
+   * a console error behind a burger that looked saved and wasn't.
+   *
+   * Storage first, then state, so the two can never disagree. Against
+   * IndexedDB the wait is imperceptible. When a remote backend lands this is
+   * the seam to revisit: applying to state first and rolling back on failure
+   * would hide the network round-trip, at the cost of having to undo a change
+   * the user can already see.
+   */
+  const mutate = useCallback(
+    async (persist: () => Promise<void>, apply: (data: AppData) => AppData) => {
+      await persist();
+      setData(apply);
+    },
+    [],
+  );
 
   const scoredByVisit = useMemo(() => {
     const entries = scoreVisits(data.visits, data.ratings);
@@ -97,35 +108,44 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     [reviewersById],
   );
 
-  const addReviewer = useCallback((name: string): Reviewer => {
-    const reviewer: Reviewer = {
-      id: newId(),
-      name: name.trim(),
-      createdAt: new Date().toISOString(),
-    };
-    setData((prev) => ({ ...prev, reviewers: [...prev.reviewers, reviewer] }));
-    return reviewer;
-  }, []);
+  const addReviewer = useCallback(
+    async (name: string): Promise<Reviewer> => {
+      const reviewer: Reviewer = {
+        id: newId(),
+        name: name.trim(),
+        createdAt: new Date().toISOString(),
+      };
+      await mutate(
+        () => repository.addReviewer(reviewer),
+        (data) => mutations.addReviewer(data, reviewer),
+      );
+      return reviewer;
+    },
+    [mutate],
+  );
 
-  const renameReviewer = useCallback((id: string, name: string) => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    setData((prev) => ({
-      ...prev,
-      reviewers: prev.reviewers.map((r) => (r.id === id ? { ...r, name: trimmed } : r)),
-    }));
-  }, []);
+  const renameReviewer = useCallback(
+    async (id: string, name: string) => {
+      // A blank rename is the user backing out of the field, not a request to
+      // erase the name. Caught here so it never reaches storage as a write.
+      if (!name.trim()) return;
+      await mutate(
+        () => repository.renameReviewer(id, name),
+        (data) => mutations.renameReviewer(data, id, name),
+      );
+    },
+    [mutate],
+  );
 
-  const deleteReviewer = useCallback((id: string) => {
-    // Their past scorecards go too. Leaving orphaned ratings behind would keep
-    // a deleted person's numbers silently folded into every burger average
-    // they ever contributed to, with no way to see whose they were.
-    setData((prev) => ({
-      ...prev,
-      reviewers: prev.reviewers.filter((r) => r.id !== id),
-      ratings: prev.ratings.filter((rating) => rating.reviewerId !== id),
-    }));
-  }, []);
+  const deleteReviewer = useCallback(
+    async (id: string) => {
+      await mutate(
+        () => repository.deleteReviewer(id),
+        (data) => mutations.deleteReviewer(data, id),
+      );
+    },
+    [mutate],
+  );
 
   const addVisit = useCallback(
     async (
@@ -144,25 +164,26 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         reviewerId,
         ...scores,
       }));
-      setData((prev) => ({
-        ...prev,
-        visits: [...prev.visits, visit],
-        ratings: [...prev.ratings, ...ratings],
-      }));
+      await mutate(
+        () => repository.addVisit(visit, ratings),
+        (data) => mutations.addVisit(data, visit, ratings),
+      );
       return visitId;
     },
-    [],
+    [mutate],
   );
 
-  const deleteVisit = useCallback(async (visitId: string) => {
-    const photoId = data.visits.find((v) => v.id === visitId)?.photoId ?? null;
-    setData((prev) => ({
-      ...prev,
-      visits: prev.visits.filter((v) => v.id !== visitId),
-      ratings: prev.ratings.filter((r) => r.burgerVisitId !== visitId),
-    }));
-    if (photoId) await repository.deletePhoto(photoId);
-  }, [data.visits]);
+  const deleteVisit = useCallback(
+    async (visitId: string) => {
+      // The photo blob goes too, but that is the repository's business now —
+      // it is the side that knows blobs exist.
+      await mutate(
+        () => repository.deleteVisit(visitId),
+        (data) => mutations.deleteVisit(data, visitId),
+      );
+    },
+    [mutate],
+  );
 
   const value = useMemo(
     (): AppStoreValue => ({

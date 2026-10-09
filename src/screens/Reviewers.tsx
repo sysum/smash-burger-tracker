@@ -9,12 +9,22 @@ export function Reviewers() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
 
-  const handleAdd = (event: React.FormEvent) => {
+  const handleAdd = async (event: React.FormEvent) => {
     event.preventDefault();
     const name = newName.trim();
     if (!name) return;
-    addReviewer(name);
+    // Cleared before the await, not after. Clearing afterwards would also wipe
+    // whatever the user typed *during* the write — a few milliseconds against
+    // IndexedDB, but a visible race as soon as the write goes over a network.
     setNewName("");
+    try {
+      await addReviewer(name);
+    } catch (error) {
+      // Hand the name back so they can retry without retyping it.
+      console.error("Failed to add reviewer", error);
+      setNewName(name);
+      window.alert("Couldn't add that reviewer. Please try again.");
+    }
   };
 
   const startEdit = (id: string, name: string) => {
@@ -22,12 +32,20 @@ export function Reviewers() {
     setEditingName(name);
   };
 
-  const commitEdit = () => {
-    if (editingId && editingName.trim()) renameReviewer(editingId, editingName);
+  const commitEdit = async () => {
+    const id = editingId;
+    const name = editingName;
     setEditingId(null);
+    if (!id || !name.trim()) return;
+    try {
+      await renameReviewer(id, name);
+    } catch (error) {
+      console.error("Failed to rename reviewer", error);
+      window.alert("Couldn't save that name. Please try again.");
+    }
   };
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     // Deleting a reviewer removes their scorecards, which changes the average
     // of every burger they rated. That is a big enough consequence to name the
     // count explicitly rather than just asking "are you sure?".
@@ -36,7 +54,13 @@ export function Reviewers() {
       affected === 0
         ? ""
         : `\n\nThis also deletes ${pluralize(affected, "scorecard")} and will change the score of the burgers they rated.`;
-    if (window.confirm(`Delete ${name}?${detail}`)) deleteReviewer(id);
+    if (!window.confirm(`Delete ${name}?${detail}`)) return;
+    try {
+      await deleteReviewer(id);
+    } catch (error) {
+      console.error("Failed to delete reviewer", error);
+      window.alert("Couldn't delete that reviewer. Please try again.");
+    }
   };
 
   return (

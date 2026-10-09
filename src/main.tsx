@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { HashRouter } from "react-router-dom";
 import { App } from "@/App";
 import { AppStoreProvider } from "@/store/AppStore";
+import { AuthStoreProvider } from "@/store/AuthStore";
 import "@/styles/global.css";
 
 /**
@@ -15,10 +16,12 @@ import "@/styles/global.css";
  */
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <AppStoreProvider>
-      <HashRouter>
-        <App />
-      </HashRouter>
-    </AppStoreProvider>
+    <AuthStoreProvider>
+      <AppStoreProvider>
+        <HashRouter>
+          <App />
+        </HashRouter>
+      </AppStoreProvider>
+    </AuthStoreProvider>
   </StrictMode>,
 );

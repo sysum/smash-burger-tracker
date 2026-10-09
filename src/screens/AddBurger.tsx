@@ -91,13 +91,22 @@ export function AddBurger() {
     );
   };
 
-  const handleQuickAdd = (event: React.FormEvent) => {
+  const handleQuickAdd = async (event: React.FormEvent) => {
     event.preventDefault();
     const name = quickName.trim();
     if (!name) return;
-    const reviewer = addReviewer(name);
-    setSelectedIds((prev) => [...prev, reviewer.id]);
+    // Cleared before the await for the same reason as on the Reviewers screen:
+    // clearing after it would wipe anything typed while the write was in
+    // flight.
     setQuickName("");
+    try {
+      const reviewer = await addReviewer(name);
+      setSelectedIds((prev) => [...prev, reviewer.id]);
+    } catch (error) {
+      console.error("Failed to add reviewer", error);
+      setQuickName(name);
+      window.alert("Couldn't add that reviewer. Please try again.");
+    }
   };
 
   const startRating = () => {
