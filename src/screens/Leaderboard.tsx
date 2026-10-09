@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import { EmptyState } from "@/components/EmptyState";
 import { SORT_OPTIONS, useAppStore, type ScoredVisit, type SortKey } from "@/store/AppStore";
+import { useAuth } from "@/store/AuthStore";
 import { formatDate, pluralize } from "@/lib/format";
 
 /** Medal styling for the podium, plain styling below it. */
@@ -40,6 +41,7 @@ function LeaderboardRow({ entry, rank }: { entry: ScoredVisit; rank: number | nu
 
 export function Leaderboard() {
   const { leaderboard, ready } = useAppStore();
+  const { canWrite } = useAuth();
   const [sort, setSort] = useState<SortKey>("highest");
   const navigate = useNavigate();
 
@@ -57,16 +59,29 @@ export function Leaderboard() {
   if (!ready) return <div className="page" />;
 
   if (entries.length === 0) {
+    // A signed-out visitor is offered a way in rather than a button that only
+    // bounces off the route guard. Same reasoning as the hidden add button in
+    // AppShell: do not offer an action that ends in a redirect.
     return (
       <div className="page">
         <EmptyState
           emoji="🍔"
           title="No burgers yet"
-          body="Add the first smash burger you've tried and it'll show up here, ranked."
+          body={
+            canWrite
+              ? "Add the first smash burger you've tried and it'll show up here, ranked."
+              : "No burgers have been rated yet. Sign in if you're one of the crew."
+          }
           action={
-            <button className="btn btn--primary" onClick={() => navigate("/add")}>
-              Add a burger
-            </button>
+            canWrite ? (
+              <button className="btn btn--primary" onClick={() => navigate("/add")}>
+                Add a burger
+              </button>
+            ) : (
+              <button className="btn btn--primary" onClick={() => navigate("/signin")}>
+                Sign in
+              </button>
+            )
           }
         />
       </div>

@@ -9,7 +9,7 @@
 # One cheap read a day resets the clock. It asks for a single id rather than
 # whole rows so the response stays tiny no matter how many burgers accumulate.
 #
-# Needs one repository secret: SUPABASE_URL and SUPABASE_ANON_KEY, under
+# Needs two repository secrets: SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY, under
 # Settings -> Secrets and variables -> Actions. Both are the same public values
 # the app ships in its bundle; they are secrets here only to keep the project
 # ref out of public logs.
@@ -30,17 +30,17 @@ jobs:
       - name: Read one row
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
         run: |
-          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
-            echo "::error::SUPABASE_URL or SUPABASE_ANON_KEY secret is not set."
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_PUBLISHABLE_KEY" ]; then
+            echo "::error::SUPABASE_URL or SUPABASE_PUBLISHABLE_KEY secret is not set."
             exit 1
           fi
 
           code=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' \
             "${SUPABASE_URL}/rest/v1/visits?select=id&limit=1" \
-            -H "apikey: ${SUPABASE_ANON_KEY}" \
-            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}")
+            -H "apikey: ${SUPABASE_PUBLISHABLE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_PUBLISHABLE_KEY}")
 
           echo "HTTP $code"
 

@@ -192,9 +192,12 @@ is ever applied by hand, reconcile it with
 first; marking an unverified migration as applied bakes the divergence in
 permanently.
 
-**Row level security is the only thing protecting the data.** The anon key is
-inlined into the JavaScript bundle by Vite and is public by design; it grants
-nothing on its own. Every table must have RLS enabled and a policy, and every
+**Row level security is the only thing protecting the data.** The publishable
+key is inlined into the JavaScript bundle by Vite and is public by design; it
+grants nothing on its own. ("Publishable" is the current name for the key
+Supabase used to call `anon`. The Postgres *role* is still called `anon` and is
+unchanged — that is what the policies target. The key was renamed, the role was
+not.) Every table must have RLS enabled and a policy, and every
 table also needs an explicit GRANT — the project is configured with
 "automatically expose new tables" off, so the two are independent gates and
 both must pass. A `service_role` key must never appear in a `VITE_` variable:
