@@ -4,6 +4,9 @@ A mobile-first PWA for logging, scoring, and ranking smash burgers. Used on a
 phone in restaurants. **Public read, private write:** anyone with the URL sees
 the leaderboard; only signed-in crew can add or change anything.
 
+Live at <https://smash-burger-tracker.vercel.app>, backed by Supabase project
+`ifaaoxnozcbmlcwofees`.
+
 **Read `README.md` too** — it covers the same ground for humans, with setup and
 deployment. This file is the short version plus the things that are easy to
 break.
@@ -228,6 +231,19 @@ back and OTP sign-in silently becomes a link again.
 **Sign-ups are disabled in the dashboard**, so having an account *is* the
 allowlist that the RLS policies rely on. Turning sign-ups on would let anyone
 who can read the leaderboard grant themselves write access.
+
+Add crew with **Authentication → Users → Add user → Create new user** (auto
+confirm). Not *Invite user*: an invite emails a `ConfirmationURL` that redirects
+to Site URL and delivers real access and refresh tokens in a URL fragment. This
+app has no callback to receive them (`detectSessionInUrl: false`, because
+HashRouter owns the fragment), so the tokens go nowhere except into whatever
+reads that URL.
+
+**Several things live only in the Supabase dashboard** and cannot be rebuilt
+from this repo: the `{{ .Token }}` email template, disabled sign-ups,
+"automatically expose new tables" off, and "enable automatic RLS" on. Recreating
+the project from `supabase/migrations/` alone gives a working database with
+silently broken sign-in.
 
 **The browser tests run against local storage, never the real project**
 (`--mode e2e` blanks the Supabase variables). They exist to prove the app's own
