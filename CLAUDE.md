@@ -192,6 +192,17 @@ is ever applied by hand, reconcile it with
 first; marking an unverified migration as applied bakes the divergence in
 permanently.
 
+**A deployed build with no Supabase configuration refuses to start.** Falling
+back to local storage is correct for `npm run dev` and for the browser tests,
+and wrong on a host: the app renders as a complete, convincing copy of itself
+with no sign-in and every visitor writing into their own browser, and nothing
+looks broken. `VITE_LOCAL_ONLY=true` is how local-only is asked for on purpose
+(`.env.e2e` sets it). Do not make the fallback silent again.
+
+Both variables must also be set **in the host**, not just in `.env.local` —
+Vite inlines them at build time, so a deploy without them needs a redeploy
+after they are added, not just a restart.
+
 **Row level security is the only thing protecting the data.** The publishable
 key is inlined into the JavaScript bundle by Vite and is public by design; it
 grants nothing on its own. ("Publishable" is the current name for the key

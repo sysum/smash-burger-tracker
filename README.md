@@ -176,7 +176,23 @@ npm run build
 ```
 
 For Vercel: framework preset "Vite", build command `npm run build`, output
-directory `dist`. No environment variables or server are needed. `vercel.json`
+directory `dist`.
+
+**Set both environment variables in the host**, for Production, Preview and
+Development:
+
+| Name | Value |
+| --- | --- |
+| `VITE_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | the `sb_publishable_…` key |
+
+Vite inlines these at build time, so adding them does nothing until you
+**redeploy**. A deployed build without them refuses to start and says so, rather
+than falling back to local storage and posing as a working app with no sign-in —
+which is what it used to do, and it is genuinely hard to spot. Set
+`VITE_LOCAL_ONLY=true` if you actually want a local-storage build.
+
+`vercel.json`
 sets cache headers only — the hashed files under `assets/` are cached
 immutably, while `sw.js`, `registerSW.js`, `manifest.webmanifest`, and
 `index.html` are served `must-revalidate`. That last part is load-bearing: with
