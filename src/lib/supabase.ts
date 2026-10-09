@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 
 /**
  * The Supabase client, or null when the app has not been given a backend.
@@ -19,8 +20,8 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
 
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
-export const supabase: SupabaseClient | null = isSupabaseConfigured
-  ? createClient(url!, anonKey!, {
+export const supabase: SupabaseClient<Database> | null = isSupabaseConfigured
+  ? createClient<Database>(url!, anonKey!, {
       auth: {
         // Keeps a signed-in crew member signed in across app launches, which
         // matters most on a phone that gets opened for ninety seconds at a
@@ -37,7 +38,7 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
   : null;
 
 /** The client, or a thrown error. For code paths that cannot proceed without it. */
-export function requireSupabase(): SupabaseClient {
+export function requireSupabase(): SupabaseClient<Database> {
   if (!supabase) {
     throw new Error(
       "Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.local.",

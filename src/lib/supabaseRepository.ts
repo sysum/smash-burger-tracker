@@ -1,5 +1,6 @@
 import { requireSupabase } from "@/lib/supabase";
 import type { Repository } from "@/lib/repository";
+import type { Database } from "@/lib/database.types";
 import type { AppData, BurgerVisit, Rating, Reviewer } from "@/types";
 
 /**
@@ -20,40 +21,25 @@ const photoPath = (id: string) => `${id}.jpg`;
 
 // --- row shapes -------------------------------------------------------------
 
-interface ReviewerRow {
-  id: string;
-  name: string;
-  created_at: string;
-}
-
-interface VisitRow {
-  id: string;
-  restaurant_name: string;
-  burger_name: string;
-  location: string;
-  date: string;
-  price: number | string | null;
-  notes: string;
-  photo_id: string | null;
-  created_at: string;
-}
-
-interface RatingRow {
-  id: string;
-  visit_id: string;
-  reviewer_id: string;
-  smash_texture: number | string;
-  beef_flavor: number | string;
-  cheese_toppings: number | string;
-  bun: number | string;
-  value: number | string;
-}
+/**
+ * Taken from the database rather than written by hand.
+ *
+ * These were three hand-maintained interfaces, which is the same duplication
+ * problem as a stored score: a column renamed in a migration left TypeScript
+ * still confidently describing the old shape, and nothing failed until runtime.
+ * Regenerate with `npm run gen:types` after any migration.
+ */
+type ReviewerRow = Database["public"]["Tables"]["reviewers"]["Row"];
+type VisitRow = Database["public"]["Tables"]["visits"]["Row"];
+type RatingRow = Database["public"]["Tables"]["ratings"]["Row"];
 
 // --- mapping ----------------------------------------------------------------
 
 /**
  * Postgres `numeric` is arbitrary-precision, which JSON has no type for, so it
- * can arrive as either a number or a string depending on the client version.
+ * can arrive as either a number or a string. The generated types declare these
+ * columns as `number`, but that is the generator's claim about the wire format,
+ * not a guarantee from PostgREST — so the runtime coercion stays.
  * Coercing here means a rating never reaches the scoring maths as "4.5" and
  * silently turns a weighted sum into string concatenation.
  */

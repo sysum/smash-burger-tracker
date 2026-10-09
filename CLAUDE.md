@@ -34,6 +34,7 @@ npm run dev -- --host  # expose on LAN for phone testing
 npm test             # Vitest, ~60 tests, sub-second
 npm run typecheck    # tsc --noEmit
 npm run lint         # ESLint
+npm run gen:types    # regenerate src/lib/database.types.ts from the remote schema
 npm run build        # typecheck + production build to dist/ (uses .env.local)
 npm run build:e2e    # same, but forced to local storage (--mode e2e)
 npm run test:e2e     # builds local-mode first, then drives a real browser
@@ -56,6 +57,7 @@ src/
 │   ├── repository.ts        The single persistence boundary + backend choice
 │   ├── supabaseRepository.ts Postgres/Storage implementation of Repository
 │   ├── supabase.ts          Client singleton; null when unconfigured
+│   ├── database.types.ts    GENERATED from the remote schema — do not hand-edit
 │   ├── mutations.ts         Every change to the dataset, as pure transforms
 │   ├── photos.ts            Downscale + re-encode before storing
 │   ├── format.ts            Date, price, number formatting
@@ -175,6 +177,20 @@ types while the write is in flight is otherwise wiped when the handler
 resumes — milliseconds against IndexedDB, but plainly visible over a network.
 `handleQuickAdd` in `AddBurger.tsx` and `handleAdd` in `Reviewers.tsx` both do
 this; `e2e/flow.mjs` catches it if they stop.
+
+**`database.types.ts` is generated, never hand-edited.** Run `npm run gen:types`
+after any migration. The Supabase client is typed against it, so a renamed
+column breaks the build at the call site instead of returning undefined at
+runtime. The three row interfaces this replaced were hand-maintained and had
+exactly the drift problem a stored score would have.
+
+Migrations are applied with `supabase db push`, not by pasting into the
+dashboard SQL editor — the remote `schema_migrations` table is then an accurate
+record of what ran, so `supabase migration list` can be trusted. If something
+is ever applied by hand, reconcile it with
+`supabase migration repair --status applied <version>` and verify the schema
+first; marking an unverified migration as applied bakes the divergence in
+permanently.
 
 **Row level security is the only thing protecting the data.** The anon key is
 inlined into the JavaScript bundle by Vite and is public by design; it grants
