@@ -17,12 +17,17 @@ npm install --no-save playwright
 npx playwright install chromium
 
 npm run build
-npm run preview &            # serves http://127.0.0.1:4173
+npm run preview -- --host 127.0.0.1 &   # serves http://127.0.0.1:4173
 
 node e2e/flow.mjs            # add reviewers → add burger → rate → verify 8.2
 node e2e/sorting.mjs         # all four sorts, ranks, unrated handling
 node e2e/photo.mjs           # photo capture + persistence, in dark mode
 ```
+
+`--host 127.0.0.1` matters: plain `npm run preview` binds `localhost`, which
+resolves to IPv6 on macOS, and the scripts dial `127.0.0.1` — without it every
+script fails with `ERR_CONNECTION_REFUSED` against a server that is plainly
+running.
 
 Each exits non-zero if any check fails, and writes screenshots to
 `e2e/screenshots/`.
