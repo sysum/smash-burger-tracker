@@ -1,0 +1,53 @@
+# Keeps the Supabase project from idling out.
+#
+# Supabase pauses a free project after about a week with no requests, and
+# restoring it is a manual click in the dashboard. This app gets used when you
+# go out for burgers -- a few times a month -- so without this it would be
+# paused most of the times you actually wanted it, and the leaderboard would be
+# down for anyone you shared the URL with.
+#
+# One cheap read a day resets the clock. It asks for a single id rather than
+# whole rows so the response stays tiny no matter how many burgers accumulate.
+#
+# Needs one repository secret: SUPABASE_URL and SUPABASE_ANON_KEY, under
+# Settings -> Secrets and variables -> Actions. Both are the same public values
+# the app ships in its bundle; they are secrets here only to keep the project
+# ref out of public logs.
+name: Keep Supabase awake
+
+on:
+  schedule:
+    # 11:00 UTC daily. GitHub delays scheduled runs under load, which is fine
+    # for a weekly deadline -- do not tighten this to hourly to compensate.
+    - cron: "0 11 * * *"
+  # So you can confirm it works without waiting a day.
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read one row
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::SUPABASE_URL or SUPABASE_ANON_KEY secret is not set."
+            exit 1
+          fi
+
+          code=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' \
+            "${SUPABASE_URL}/rest/v1/visits?select=id&limit=1" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}")
+
+          echo "HTTP $code"
+
+          # A paused project does not answer 200, so a failure here is the
+          # signal that something needs attention -- not noise to ignore.
+          if [ "$code" != "200" ]; then
+            echo "::error::Expected HTTP 200, got $code. The project may be paused or deleted."
+            exit 1
+          fi
+          echo "Project is awake."
