@@ -1,5 +1,7 @@
 import { del, get, set, update } from "idb-keyval";
 import * as mutations from "@/lib/mutations";
+import { isSupabaseConfigured } from "@/lib/supabase";
+import { SupabaseRepository } from "@/lib/supabaseRepository";
 import type { AppData, BurgerVisit, Rating, Reviewer } from "@/types";
 
 /**
@@ -146,4 +148,14 @@ class IndexedDbRepository implements Repository {
   }
 }
 
-export const repository: Repository = new IndexedDbRepository();
+/**
+ * The repository the app runs on.
+ *
+ * This is the one line the whole boundary exists to protect. With Supabase
+ * configured the app reads and writes Postgres; without it, IndexedDB, exactly
+ * as before. No screen, component, or store action changes either way — and
+ * `npm run dev` still works with no `.env.local` at all.
+ */
+export const repository: Repository = isSupabaseConfigured
+  ? new SupabaseRepository()
+  : new IndexedDbRepository();
