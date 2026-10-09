@@ -82,6 +82,7 @@ src/
 │   ├── scoring.ts           Weights + all score maths (pure)
 │   ├── leaderboard.ts       Scoring visits + ranking rules (pure)
 │   ├── repository.ts        The single persistence boundary
+│   ├── mutations.ts         Every change to the dataset, as pure transforms
 │   ├── photos.ts            Downscale + re-encode before storing
 │   ├── format.ts            Date, price, and number formatting
 │   └── id.ts                Id generation
@@ -98,6 +99,18 @@ in one place rather than scattered through components.
 **All persistence goes through `Repository`.** Nothing above that interface
 knows the data lives in IndexedDB. Swapping in a synced backend later means
 writing one new implementation, not touching screens.
+
+The interface exposes one method per user-visible change — add a reviewer,
+delete a burger — rather than a single `save(wholeDataset)`. Both shapes work
+against local storage, but only this one works against a server: a
+whole-dataset write means rewriting every row on every edit, and two devices
+editing at once overwrite each other wholesale because neither write says what
+it changed.
+
+Each change is defined once, as a pure transform in `lib/mutations.ts`. The
+store applies it to React state and the repository applies it to storage, so
+the two cannot drift. Store actions await the write and surface its failure,
+which means a failed save reaches the user rather than a console.
 
 ### Data model
 
@@ -163,7 +176,19 @@ npm run build
 ```
 
 For Vercel: framework preset "Vite", build command `npm run build`, output
-directory `dist`. No environment variables or server are needed.
+directory `dist`. No environment variables or server are needed. `vercel.json`
+sets cache headers only — the hashed files under `assets/` are cached
+immutably, while `sw.js`, `registerSW.js`, `manifest.webmanifest`, and
+`index.html` are served `must-revalidate`. That last part is load-bearing: with
+`registerType: "autoUpdate"`, a cached service worker pins users to an old
+build permanently.
+
+There are no rewrite rules because `HashRouter` keeps every route at `/#/...`,
+so the server only ever serves `/`. Switching to `BrowserRouter` would mean
+adding a catch-all rewrite here — and would break the Capacitor path.
+
+Deploying over HTTPS is also what makes the PWA real: iOS only offers "Add to
+Home Screen" on a secure origin, never on a LAN dev server.
 
 ## Deliberately not included
 
