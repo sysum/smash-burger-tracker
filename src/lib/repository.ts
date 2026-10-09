@@ -1,5 +1,6 @@
-import { del, get, set } from "idb-keyval";
-import type { AppData } from "@/types";
+import { del, get, set, update } from "idb-keyval";
+import * as mutations from "@/lib/mutations";
+import type { AppData, BurgerVisit, Rating, Reviewer } from "@/types";
 
 /**
  * The single persistence boundary for the whole app.
@@ -11,6 +12,14 @@ import type { AppData } from "@/types";
  * swap is a new implementation of `Repository` and a one-line change to
  * `repository` below. No screen changes.
  *
+ * The interface is one method per user-visible change rather than a single
+ * `save(wholeDataset)`. Both shapes work against local storage, but only this
+ * one works against a network backend: a whole-dataset write means rewriting
+ * every row on every edit, and — worse — two devices editing the same data
+ * overwrite each other wholesale, because neither write says what it changed.
+ * Naming the individual change keeps a remote implementation to one INSERT or
+ * one DELETE, and keeps concurrent edits from clobbering each other.
+ *
  * Why IndexedDB rather than localStorage: localStorage caps around 5MB and
  * stores strings only, so burger photos would either blow the quota or need
  * base64 encoding (a 33% size penalty on top). IndexedDB stores Blobs natively
@@ -20,8 +29,17 @@ import type { AppData } from "@/types";
 export interface Repository {
   /** Read the whole dataset. Returns empty collections on first run. */
   load(): Promise<AppData>;
-  /** Write the whole dataset. */
-  save(data: AppData): Promise<void>;
+
+  addReviewer(reviewer: Reviewer): Promise<void>;
+  renameReviewer(id: string, name: string): Promise<void>;
+  /** Deletes the reviewer and every scorecard they wrote. */
+  deleteReviewer(id: string): Promise<void>;
+
+  /** Create a burger and its reviewers' scorecards in one atomic write. */
+  addVisit(visit: BurgerVisit, ratings: Rating[]): Promise<void>;
+  /** Deletes the burger, its scorecards, and its photo. */
+  deleteVisit(visitId: string): Promise<void>;
+
   /** Store a photo blob, returning its key. */
   putPhoto(id: string, blob: Blob): Promise<void>;
   /** Read a photo blob, or null if it's missing. */
@@ -54,6 +72,19 @@ function normalize(raw: unknown): AppData {
 }
 
 class IndexedDbRepository implements Repository {
+  /**
+   * Apply one pure mutation to the stored dataset.
+   *
+   * `update` runs the read, the transform, and the write inside a single
+   * IndexedDB transaction. A hand-rolled `load()` then `save()` would not:
+   * two mutations fired in quick succession — tapping Add twice, or a save
+   * racing a delete — can interleave their reads and the second write then
+   * silently discards the first change.
+   */
+  private apply(transform: (data: AppData) => AppData): Promise<void> {
+    return update(DATA_KEY, (raw) => transform(normalize(raw)));
+  }
+
   async load(): Promise<AppData> {
     try {
       return normalize(await get(DATA_KEY));
@@ -65,8 +96,30 @@ class IndexedDbRepository implements Repository {
     }
   }
 
-  async save(data: AppData): Promise<void> {
-    await set(DATA_KEY, data);
+  addReviewer(reviewer: Reviewer): Promise<void> {
+    return this.apply((data) => mutations.addReviewer(data, reviewer));
+  }
+
+  renameReviewer(id: string, name: string): Promise<void> {
+    return this.apply((data) => mutations.renameReviewer(data, id, name));
+  }
+
+  deleteReviewer(id: string): Promise<void> {
+    return this.apply((data) => mutations.deleteReviewer(data, id));
+  }
+
+  addVisit(visit: BurgerVisit, ratings: Rating[]): Promise<void> {
+    return this.apply((data) => mutations.addVisit(data, visit, ratings));
+  }
+
+  async deleteVisit(visitId: string): Promise<void> {
+    // Read the photo id before the record goes, so the blob can be cleaned up
+    // afterwards. Deleting the record is what the user asked for and must
+    // succeed; an orphaned blob is a little wasted space, so the photo delete
+    // comes second and is allowed to fail quietly.
+    const photoId = mutations.photoIdForVisit(await this.load(), visitId);
+    await this.apply((data) => mutations.deleteVisit(data, visitId));
+    if (photoId) await this.deletePhoto(photoId);
   }
 
   async putPhoto(id: string, blob: Blob): Promise<void> {
